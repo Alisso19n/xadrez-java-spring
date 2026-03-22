@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Xadrez - Projeto Padrões</title>
+    <style>
+        body{
+          font-family: Arial, sans-serif;
+          background:#222;
+          color:#fff;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          margin:0;
+          padding:20px;
+        }
+        h1{ margin:0 0 6px 0; }
+
+        .players{ margin-bottom:10px; font-size:14px; }
+
+        .controls{ margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+        button{
+          padding:8px 16px;
+          border-radius:4px;
+          border:none;
+          cursor:pointer;
+        }
+        button:hover{ filter:brightness(1.1); }
+        #reloadBtn{ background:#4CAF50; color:#fff; }
+        #resetBtn{ background:#e53935; color:#fff; }
+        #undoBtn{ background:#1976d2; color:#fff; }
+
+        /* Container do tabuleiro com coordenadas */
+        #board-wrap{
+          display:grid;
+          grid-template-columns: 28px auto;
+          grid-template-rows: auto 28px;
+          gap:8px;
+          align-items:start;
+        }
+
+        /* Números (8..1) à esquerda */
+        #ranks{
+          display:grid;
+          grid-template-rows: repeat(8, 60px);
+          width:28px;
+          user-select:none;
+          color:#ddd;
+          font-size:12px;
+        }
+        .rank{
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+
+        /* Letras (A..H) embaixo */
+        #files{
+          grid-column: 2;
+          display:grid;
+          grid-template-columns: repeat(8, 60px);
+          height:28px;
+          user-select:none;
+          color:#ddd;
+          font-size:12px;
+        }
+        .file{
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+
+        /* Tabuleiro */
+        #board{
+          display:grid;
+          grid-template-columns: repeat(8, 60px);
+          grid-template-rows: repeat(8, 60px);
+          border:4px solid #333;
+          box-shadow:0 0 10px #000;
+        }
+
+        .square{
+          width:60px; height:60px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:34px;
+          box-sizing:border-box;
+          cursor:pointer;
+          user-select:none;
+          position:relative;
+        }
+        .dark{ background:#769656; }
+        .light{ background:#eeeed2; }
+        .selected{ outline:3px solid yellow; }
+
+        /* peças */
+        .piece{ line-height:1; }
+        .white-piece{
+          color:#fff;
+          text-shadow:
+            -1px -1px 0 #000,
+             1px -1px 0 #000,
+            -1px  1px 0 #000,
+             1px  1px 0 #000,
+             0 2px 6px rgba(0,0,0,0.6);
+        }
+        .black-piece{
+          color:#111;
+          text-shadow:
+            -1px -1px 0 #fff,
+             1px -1px 0 #fff,
+            -1px  1px 0 #fff,
+             1px  1px 0 #fff,
+             0 2px 6px rgba(255,255,255,0.2);
+        }
+
+        #status{
+          margin-top:14px;
+          font-size:14px;
+          color:#ccc;
+          min-height:18px;
+          text-align:center;
+        }
+    </style>
+</head>
+<body>
+<h1>Jogo de Xadrez</h1>
+
+<div class="players">
+    <span>Brancas: Jogador 1</span> |
+    <span>Pretas: Jogador 2</span>
+</div>
+
+<div class="controls">
+    <button id="reloadBtn">Recarregar Tabuleiro</button>
+    <button id="undoBtn">Desfazer Jogada</button>
+    <button id="resetBtn">Reiniciar Partida</button>
+</div>
+
+<div id="board-wrap">
+    <div id="ranks"></div>
+    <div id="board"></div>
+    <div></div>
+    <div id="files"></div>
+</div>
+
+<div id="status"></div>
+
+<script>
+    let ultimoTabuleiro = null; // PecaDTO[][]
+    let selecao = null;         // {linha, coluna}
+    let vezAtual = 'BRANCO';
+
+    const boardDiv = document.getElementById('board');
+    const statusDiv = document.getElementById('status');
+
+    // coordenadas
+    const ranksDiv = document.getElementById('ranks');
+    const filesDiv = document.getElementById('files');
+
+    function desenharCoordenadas(){
+      ranksDiv.innerHTML = '';
+      // linha 0 é "8", linha 7 é "1"
+      for (let linha = 0; linha < 8; linha++){
+        const d = document.createElement('div');
+        d.className = 'rank';
+        d.textContent = (8 - linha).toString();
+        ranksDiv.appendChild(d);
+      }
+
+      filesDiv.innerHTML = '';
+      const letras = ['A','B','C','D','E','F','G','H'];
+      for (let c = 0; c < 8; c++){
+        const d = document.createElement('div');
+        d.className = 'file';
+        d.textContent = letras[c];
+        filesDiv.appendChild(d);
+      }
+    }
+
+    async function carregarTabuleiro() {
+      try {
+        const resposta = await fetch('/api/tabuleiro');
+        if (!resposta.ok) throw new Error('Erro ao buscar tabuleiro: ' + resposta.status);
+
+        const data = await resposta.json();
+        ultimoTabuleiro = data.casas;
+        desenharCoordenadas();
+        desenharTabuleiro();
+        statusDiv.textContent = 'Vez das ' + vezAtual;
+      } catch (e) {
+        console.error(e);
+        statusDiv.textContent = 'Erro ao carregar tabuleiro: ' + e.message;
+      }
+    }
+
+    function desenharTabuleiro() {
+      boardDiv.innerHTML = '';
+
+      for (let linha = 0; linha < 8; linha++) {
+        for (let coluna = 0; coluna < 8; coluna++) {
+          const squareDiv = document.createElement('div');
+          squareDiv.classList.add('square');
+          squareDiv.classList.add(((linha + coluna) % 2 === 0) ? 'light' : 'dark');
+
+          squareDiv.dataset.linha = linha.toString();
+          squareDiv.dataset.coluna = coluna.toString();
+
+          const peca = ultimoTabuleiro ? ultimoTabuleiro[linha][coluna] : null;
+          if (peca) {
+            const span = document.createElement('span');
+            span.classList.add('piece');
+            span.classList.add(peca.cor === 'BRANCO' ? 'white-piece' : 'black-piece');
+            span.textContent = iconePeca(peca.tipo, peca.cor);
+            squareDiv.appendChild(span);
+          }
+
+          squareDiv.addEventListener('click', onSquareClick);
+          boardDiv.appendChild(squareDiv);
+        }
+      }
+    }
+
+    function iconePeca(tipo, cor) {
+      const brancas = { REI:'♔', RAINHA:'♕', TORRE:'♖', BISPO:'♗', CAVALO:'♘', PEAO:'♙' };
+      const pretas  = { REI:'♚', RAINHA:'♛', TORRE:'♜', BISPO:'♝', CAVALO:'♞', PEAO:'♟' };
+      return (cor === 'BRANCO' ? brancas : pretas)[tipo] || '?';
+    }
+
+    function limparSelecaoVisual() {
+      document.querySelectorAll('.square.selected').forEach(sq => sq.classList.remove('selected'));
+    }
+
+    async function onSquareClick(e) {
+      const linha = parseInt(e.currentTarget.dataset.linha);
+      const coluna = parseInt(e.currentTarget.dataset.coluna);
+
+      if (!ultimoTabuleiro) return;
+
+      if (!selecao) {
+        const peca = ultimoTabuleiro[linha][coluna];
+        if (!peca) { statusDiv.textContent = 'Selecione uma casa com peça.'; return; }
+
+        selecao = { linha, coluna };
+        limparSelecaoVisual();
+        e.currentTarget.classList.add('selected');
+        statusDiv.textContent = `Origem: (${linha}, ${coluna})`;
+        return;
+      }
+
+      // cancelar se clicar na mesma casa
+      if (selecao.linha === linha && selecao.coluna === coluna) {
+        selecao = null;
+        limparSelecaoVisual();
+        statusDiv.textContent = 'Seleção cancelada.';
+        return;
+      }
+
+      const origem = { ...selecao };
+      const destino = { linha, coluna };
+      const pecaOrigem = ultimoTabuleiro[origem.linha][origem.coluna];
+
+      selecao = null;
+      limparSelecaoVisual();
+
+      // promoção (front pergunta, backend aceita opcional)
+      let promocaoOpcional = null;
+      if (pecaOrigem && pecaOrigem.tipo === 'PEAO') {
+        const ultimaFileira = (pecaOrigem.cor === 'BRANCO' && destino.linha === 0)
+                           || (pecaOrigem.cor === 'PRETO'  && destino.linha === 7);
+        if (ultimaFileira) {
+          const escolha = prompt('Promoção! Digite: RAINHA, TORRE, BISPO ou CAVALO', 'RAINHA');
+          if (escolha) promocaoOpcional = escolha.trim().toUpperCase();
+        }
+      }
+
+      await enviarMovimento(origem, destino, promocaoOpcional);
+    }
+
+    async function enviarMovimento(origem, destino, promocaoOpcional) {
+      try {
+        const resposta = await fetch('/api/movimento', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origemLinha: origem.linha,
+            origemColuna: origem.coluna,
+            destinoLinha: destino.linha,
+            destinoColuna: destino.coluna,
+            promocaoOpcional
+          })
+        });
+
+        const data = await resposta.json();
+
+        // sempre vem MovimentoResponseDTO (ok ou erro)
+        if (data.tabuleiro && data.tabuleiro.casas) {
+          ultimoTabuleiro = data.tabuleiro.casas;
+          desenharTabuleiro();
+        }
+
+        if (data.vez) vezAtual = data.vez;
+
+        let msg = data.mensagem || '';
+        if (data.mateBrancas || data.matePretas) {
+          // mensagem do backend já deve falar o vencedor
+          statusDiv.textContent = msg || 'Fim de jogo.';
+          return;
+        }
+
+        if (data.xequeBrancas) msg += ' (Rei branco em XEQUE!)';
+        if (data.xequePretas)  msg += ' (Rei preto em XEQUE!)';
+
+        statusDiv.textContent = msg || ('Vez das ' + vezAtual);
+      } catch (e) {
+        console.error(e);
+        statusDiv.textContent = 'Erro ao enviar movimento: ' + e.message;
+      }
+    }
+
+    async function reiniciarPartida() {
+      try {
+        await fetch('/api/reiniciar', { method: 'POST' });
+        vezAtual = 'BRANCO';
+        await carregarTabuleiro();
+        statusDiv.textContent = 'Partida reiniciada. Vez das BRANCAS.';
+      } catch (e) {
+        console.error(e);
+        statusDiv.textContent = 'Erro ao reiniciar: ' + e.message;
+      }
+    }
+
+    async function desfazerJogada() {
+      try {
+        const resposta = await fetch('/api/desfazer', { method: 'POST' });
+        const data = await resposta.json();
+
+        if (data.tabuleiro && data.tabuleiro.casas) {
+          ultimoTabuleiro = data.tabuleiro.casas;
+          desenharTabuleiro();
+        }
+        if (data.vez) vezAtual = data.vez;
+
+        statusDiv.textContent = data.mensagem || ('Vez das ' + vezAtual);
+      } catch (e) {
+        console.error(e);
+        statusDiv.textContent = 'Erro ao desfazer: ' + e.message;
+      }
+    }
+
+    document.getElementById('reloadBtn').addEventListener('click', carregarTabuleiro);
+    document.getElementById('resetBtn').addEventListener('click', reiniciarPartida);
+    document.getElementById('undoBtn').addEventListener('click', desfazerJogada);
+
+    carregarTabuleiro();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
