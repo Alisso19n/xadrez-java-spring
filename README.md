@@ -158,8 +158,9 @@ src
 
 1. Clonar o repositorio
 
-```https://github.com/Alisso19n/xadrez-java-spring
-
+```
+https://github.com/Alisso19n/xadrez-java-spring
+```
 2. Abrir no IntelliJ IDEA
 
 3. Executar a classe principal:
