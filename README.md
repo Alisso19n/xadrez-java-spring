@@ -156,11 +156,9 @@ src
 
 # ▶ Como executar o projeto
 
-1. Clonar o repositório
+1. Clonar o repositorio
 
-```
-git clone https://github.com/seuusuario/xadrez-java-spring.git
-```
+```https://github.com/Alisso19n/xadrez-java-spring
 
 2. Abrir no IntelliJ IDEA
 
